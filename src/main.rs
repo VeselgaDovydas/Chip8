@@ -1,3 +1,4 @@
+use rand::prelude::*;
 mod tests;
 
 struct Chip8{
@@ -43,9 +44,15 @@ impl Chip8{
             0x00E0 => self.clear_screen(),
             0x00EE => self.return_from_subroutine(),
             0x1000..=0x1FFF => self.jump_to_address(opcode),
+            0x2000..=0x2FFF => self.call_subroutine(opcode),
+            0x3000..=0x3FFF => self.skip_next_same_value(opcode),
+            0x4000..=0x4FFF => self.skip_next_not_same_value(opcode),
             0x6000..=0x6FFF => self.set_register(opcode),
             0x7000..=0x7FFF => self.add_to_register(opcode),
+            0x9000..=0x9FFF => self.skip_next_if_not_equal(opcode),
             0xA000..=0xAFFF => self.index_register(opcode),
+            0xC000..=0xCFFF => self.set_register_random_source(opcode),
+            0xD000..=0xDFFF => self.draw_sprite(opcode),
             _ => println!("opcode not found {:#X}", opcode)
         }
     }
@@ -59,18 +66,45 @@ impl Chip8{
     ///0x00EE
     fn return_from_subroutine(&mut self) {
         println!("Executing 'return from subroutine");
-        if let Some(address) = self.stack.pop(){
+        if let Some(address) = self.stack.pop() {
             self.pc = address;
             println!("Returned to address {:#X}", self.pc);
-        }else{
+        } else {
             println!("No address for subroutine");
         }
     }
-    
+
     ///0x1000..=0x1FFF
     fn jump_to_address(&mut self, opcode: u16) {
         println!("Executing 'jump_to_address'");
         self.pc = opcode & 0x0FFF;
+    }
+    
+    ///0x2000..=0x2FFF
+    fn call_subroutine(&mut self, opcode: u16) {
+        println!("Executing 'call_subroutine' with opcode {:#X}", opcode);
+        let address = opcode & 0x0FFF;
+        self.stack.push(self.pc);
+        self.pc = address;
+    }
+    
+    ///0x3000..=0x3FFF
+    fn skip_next_same_value(&mut self, opcode: u16) {
+        println!("Executing 'skip_next_register'");
+        let (register_index, register_value) = self.retrieve_opcode_register_data(opcode);
+        
+        if self.v[register_index as usize] == register_value {
+            self.pc += 4;
+        }
+    }
+    
+    ///0x4000..=0x4FFF
+    fn skip_next_not_same_value(&mut self, opcode: u16) {
+        println!("Executing 'skip_next_register_not_same_value'");
+        let (register_index, register_value) = self.retrieve_opcode_register_data(opcode);
+        if self.v[register_index as usize] != register_value {
+            self.pc += 4;
+        }
     }
     
     ///0x6000..=0x6FFF
@@ -104,6 +138,18 @@ impl Chip8{
                  opcode, register_index, register_value, self.v[register_index as usize]);
     }
 
+    ///0x9000..=0x9FFF
+    fn skip_next_if_not_equal(&mut self, opcode: u16) {
+        let register_index_x = (opcode & 0x0F00) >> 8;
+        let register_index_y = (opcode & 0x00F0) >> 4;
+
+        if self.v[register_index_x as usize] != self.v[register_index_y as usize] {
+            self.pc += 4;
+        } else {
+            self.pc += 2;
+        }
+    }
+
     ///0xA000..=0xAFFF
     fn index_register(&mut self, opcode: u16) {
         println!("Executing 'index_register");
@@ -111,6 +157,26 @@ impl Chip8{
         self.i = index_value;
         
         println!("Opcode {:#X} Index set as {:#X}", opcode, index_value);
+    }
+    
+    ///0xC000..=0xCFFF
+    fn set_register_random_source(&mut self, opcode: u16) {
+        println!("Executing 'set_random_source'");
+        let mut rng = rand::rng();
+        let rng_value = rng.random_range(0..=255) as u8;
+        let (register_index, register_value) = self.retrieve_opcode_register_data(opcode);
+        self.v[register_index as usize] = rng_value & register_value;
+    }
+    
+    ///0xD000..=0xDFFF
+    fn draw_sprite(&mut self, opcode: u16) {
+        //Dxyn - DRW Vx, Vy, nibble
+        println!("Executing 'draw_sprite'");
+        let vy = ((opcode & 0x00F0) >> 4) as u8;
+        let vx = ((opcode & 0x0F00) >> 8) as u8;
+        let length = (opcode & 0x000F) as u8;
+        
+        // todo: draw logic
     }
 }
 
