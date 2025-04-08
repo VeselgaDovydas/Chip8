@@ -8,7 +8,8 @@ struct Chip8{
     timer: [u8; 60],
     display: [[bool; 64]; 32 ], //Display - 64x32, pixel is 0 or 1.
     stack: Vec<u16>,
-    i: u16
+    i: u16,
+    vf: u8, // Collision flag (VF register)
 }
 
 impl Chip8{
@@ -20,12 +21,9 @@ impl Chip8{
             timer: [0; 60],
             display: [[false; 64]; 32 ],
             stack: Vec::<u16>::new(),
-            i: 0
+            i: 0,
+            vf: 0,
         }
-    }
-    
-    fn step_pc_counter(&mut self) {
-        self.pc = self.pc + 2;
     }
 
     fn retrieve_opcode_register_data(&mut self, opcode: u16) -> (u8, u8){
@@ -35,7 +33,7 @@ impl Chip8{
     fn fetch_opcode(&mut self) -> u16 {
         let high_byte = self.memory[self.pc as usize] as u16;
         let low_byte = self.memory[(self.pc + 1) as usize] as u16;
-        self.step_pc_counter();
+        self.pc += 2;
         (high_byte << 8) | low_byte // shifts to left and combines with Bitwise OR
     }
     
@@ -54,6 +52,20 @@ impl Chip8{
             0xC000..=0xCFFF => self.set_register_random_source(opcode),
             0xD000..=0xDFFF => self.draw_sprite(opcode),
             _ => println!("opcode not found {:#X}", opcode)
+        }
+    }
+
+    fn print_display(&self) {
+        for y in 0..32 {  // 32 rows
+            let mut row = String::new();
+            for x in 0..64 {  // 64 columns
+                if self.display[y as usize][x as usize] {
+                    row.push('#');
+                } else {
+                    row.push('.');
+                }
+            }
+            println!("{}", row);
         }
     }
     
@@ -170,16 +182,62 @@ impl Chip8{
     
     ///0xD000..=0xDFFF
     fn draw_sprite(&mut self, opcode: u16) {
-        //Dxyn - DRW Vx, Vy, nibble
         println!("Executing 'draw_sprite'");
-        let vy = ((opcode & 0x00F0) >> 4) as u8;
         let vx = ((opcode & 0x0F00) >> 8) as u8;
-        let length = (opcode & 0x000F) as u8;
-        
-        // todo: draw logic
+        let vy = ((opcode & 0x00F0) >> 4) as u8;
+        let n = (opcode & 0x000F) as u8;
+        let mut collision = false;
+
+        for row in 0..n {
+            let byte = self.memory[self.i as usize + row as usize];
+            let y = vy + row;
+
+            for bit_index in 0..8 {
+                let bit = (byte >> (7 - bit_index)) & 1;
+                let x = vx + bit_index;
+
+                let cur_pixel = self.display[y as usize][x as usize];
+                let new_pixel = cur_pixel ^ (bit != 0);
+                self.display[y as usize][x as usize] = new_pixel;
+
+                if cur_pixel && !new_pixel{
+                    collision = true;
+                }
+            }
+        }
+
+        if collision {
+            self.vf = 1;
+        } else {
+            self.vf = 0;
+        }
+
+        self.pc += 2;
     }
 }
 
 fn main() {
-    println!("Running the Chip8 emulator...");
+    let mut chip = Chip8::new();
+
+    // Initialize display for debugging
+    chip.display[1][0] = true;
+    chip.display[1][1] = true;
+    
+    println!("Initial display:");
+    chip.print_display();
+    
+    let opcode: u16 = 0xD015;
+
+    // Set up some memory with sprite data
+    chip.i = 0x200;
+    chip.memory[0x200] = 0xFF;
+    chip.memory[0x201] = 0x00;
+    chip.memory[0x202] = 0xFF;
+    chip.memory[0x203] = 0x00;
+    chip.memory[0x204] = 0xFF;
+    
+    chip.draw_sprite(opcode);
+    
+    println!("Display after drawing:");
+    chip.print_display();
 }

@@ -105,4 +105,53 @@ mod tests {
         
         println!("Test passed: pc = {:#X}", chip.pc);
     }
+    
+    #[test]
+    fn draw_sprite_no_collision(){
+        let mut chip = Chip8::new();
+        
+        chip.v[0x1] = 5;
+        chip.v[0x2] = 5;
+        chip.i = 0x200;
+
+        // Store sprite data (0xFF) in memory starting at address 0x200
+        chip.memory[0x200] = 0xFF;
+        chip.memory[0x201] = 0x10;
+        
+        chip.display = [[false; 64]; 32 ];
+        
+        let opcode = 0xD015;
+        
+        chip.draw_sprite(opcode);
+
+        assert_eq!(chip.display[1][0], true);
+        assert_eq!(chip.display[1][1], true);
+        assert_eq!(chip.display[1][2], true);
+        assert_eq!(chip.display[1][3], true);
+        assert_eq!(chip.display[1][4], true);
+        assert_eq!(chip.display[1][5], true);
+        assert_eq!(chip.display[1][6], true);
+        assert_eq!(chip.display[1][7], true);
+        assert_eq!(chip.vf, 0);
+    }
+    
+    #[test]
+    fn test_draw_sprite_with_collision() {
+        let mut chip = Chip8::new();
+        
+        chip.v[0x0] = 0;
+        chip.v[0x1] = 1;
+        chip.i = 0x200;
+        
+        chip.memory[0x200] = 0xFF;
+        chip.memory[0x201] = 0x00;
+        chip.display[1][0] = true;
+        
+        let opcode = 0xD015;
+        chip.draw_sprite(opcode);
+        
+        assert_eq!(chip.display[1][0], false);
+        assert_eq!(chip.vf, 1);
+    }
+    
 }
